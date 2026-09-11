@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { ArrowLeft, Lock, Pencil, Trash2, Plus, LogOut } from 'lucide-react';
+import { ArrowLeft, Lock, Pencil, Trash2, Plus, LogOut, Image as ImageIcon } from 'lucide-react';
 import { supabase } from './supabaseClient';
 
 function formatDate(iso) {
@@ -31,7 +31,7 @@ export default function App() {
   const [loggingIn, setLoggingIn] = useState(false);
 
   const [editingId, setEditingId] = useState(null);
-  const [form, setForm] = useState({ title: '', category: '', excerpt: '', content: '', date: '' });
+  const [form, setForm] = useState({ title: '', category: '', excerpt: '', content: '', date: '', image_url: '' });
   const [formError, setFormError] = useState('');
   const [saving, setSaving] = useState(false);
   const [pendingDelete, setPendingDelete] = useState(null);
@@ -124,6 +124,7 @@ export default function App() {
       category: '',
       excerpt: '',
       content: '',
+      image_url: '',
       date: new Date().toISOString().slice(0, 10),
     });
     setFormError('');
@@ -135,6 +136,7 @@ export default function App() {
       category: article.category,
       excerpt: article.excerpt || '',
       content: article.content,
+      image_url: article.image_url || '',
       date: article.date,
     });
     setFormError('');
@@ -160,6 +162,7 @@ export default function App() {
       category: form.category.trim() || 'General',
       excerpt: form.excerpt.trim() || form.content.trim().slice(0, 140),
       content: form.content.trim(),
+      image_url: form.image_url.trim() || null,
       date: form.date || new Date().toISOString().slice(0, 10),
     };
 
@@ -230,11 +233,14 @@ export default function App() {
         .d-hero-title:hover { color: var(--accent); }
         .d-hero-excerpt { font-size: 18px; color: var(--ink-soft); max-width: 62ch; margin: 0 0 10px; }
         .d-hero-date { font-size: 13px; color: var(--ink-faint); }
+        .d-img-cover { width: 100%; max-height: 380px; object-fit: cover; border-radius: 6px; margin: 16px 0 24px; border: 1px solid var(--line); }
+        .d-img-thumb { width: 120px; height: 80px; object-fit: cover; border-radius: 4px; border: 1px solid var(--line); flex-shrink: 0; }
         @keyframes fadeUp { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
         @media (prefers-reduced-motion: no-preference) { .d-hero { animation: fadeUp 0.55s ease both; } }
         .d-list { margin-top: 44px; }
-        .d-row { padding: 26px 0; border-top: 1px solid var(--line); cursor: pointer; }
+        .d-row { padding: 26px 0; border-top: 1px solid var(--line); cursor: pointer; display: flex; gap: 20px; align-items: flex-start; justify-content: space-between; }
         .d-row:last-child { border-bottom: 1px solid var(--line); }
+        .d-row-content { flex: 1; }
         .d-row-cat { color: var(--accent); font-size: 13px; font-weight: 600; margin-bottom: 6px; }
         .d-row-title { font-size: 22px; font-weight: 600; margin: 0 0 8px; line-height: 1.3; font-family: 'Fraunces', Georgia, serif; }
         .d-row:hover .d-row-title { color: var(--accent); }
@@ -245,7 +251,7 @@ export default function App() {
         .d-back:hover { color: var(--accent); }
         .d-article-cat { color: var(--accent); font-size: 13px; font-weight: 600; margin-bottom: 12px; }
         .d-article-title { font-size: clamp(30px, 5vw, 42px); line-height: 1.15; font-weight: 600; margin: 0 0 14px; max-width: 20ch; font-family: 'Fraunces', Georgia, serif; }
-        .d-article-date { color: var(--ink-faint); font-size: 13px; margin-bottom: 36px; }
+        .d-article-date { color: var(--ink-faint); font-size: 13px; margin-bottom: 24px; }
         .d-article-body p { font-size: 18px; line-height: 1.75; color: #26272c; max-width: 66ch; margin: 0 0 22px; }
         .d-footer { border-top: 1px solid var(--line); padding: 22px 0 50px; }
         .d-footer-row { display: flex; justify-content: space-between; align-items: center; font-size: 13px; color: var(--ink-faint); }
@@ -294,6 +300,8 @@ export default function App() {
           .d-panel { padding: 20px; }
           .d-admin-row { flex-direction: column; align-items: flex-start; }
           .d-admin-row-actions { align-self: flex-end; }
+          .d-row { flex-direction: column-reverse; }
+          .d-img-thumb { width: 100%; height: 160px; }
         }
       `}</style>
 
@@ -322,6 +330,9 @@ export default function App() {
                 <div className="d-hero">
                   <div className="d-hero-cat">{sorted[0].category}</div>
                   <h1 className="d-hero-title" onClick={() => openArticle(sorted[0].id)}>{sorted[0].title}</h1>
+                  {sorted[0].image_url && (
+                    <img src={sorted[0].image_url} alt={sorted[0].title} className="d-img-cover" onClick={() => openArticle(sorted[0].id)} style={{ cursor: 'pointer' }} />
+                  )}
                   <p className="d-hero-excerpt">{sorted[0].excerpt}</p>
                   <div className="d-hero-date">{formatDate(sorted[0].date)}</div>
                 </div>
@@ -330,10 +341,15 @@ export default function App() {
                 <div className="d-list">
                   {sorted.slice(1).map((a) => (
                     <article key={a.id} className="d-row" onClick={() => openArticle(a.id)}>
-                      <div className="d-row-cat">{a.category}</div>
-                      <h2 className="d-row-title">{a.title}</h2>
-                      <p className="d-row-excerpt">{a.excerpt}</p>
-                      <div className="d-row-date">{formatDate(a.date)}</div>
+                      <div className="d-row-content">
+                        <div className="d-row-cat">{a.category}</div>
+                        <h2 className="d-row-title">{a.title}</h2>
+                        <p className="d-row-excerpt">{a.excerpt}</p>
+                        <div className="d-row-date">{formatDate(a.date)}</div>
+                      </div>
+                      {a.image_url && (
+                        <img src={a.image_url} alt={a.title} className="d-img-thumb" />
+                      )}
                     </article>
                   ))}
                 </div>
@@ -347,6 +363,9 @@ export default function App() {
               <div className="d-article-cat">{active.category}</div>
               <h1 className="d-article-title">{active.title}</h1>
               <div className="d-article-date">{formatDate(active.date)}</div>
+              {active.image_url && (
+                <img src={active.image_url} alt={active.title} className="d-img-cover" />
+              )}
               <div className="d-article-body">
                 {active.content.split('\n').filter(Boolean).map((p, i) => <p key={i}>{p}</p>)}
               </div>
@@ -405,6 +424,10 @@ export default function App() {
                     <div className="d-field">
                       <label htmlFor="f-date">Date</label>
                       <input id="f-date" type="date" value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} />
+                    </div>
+                    <div className="d-field">
+                      <label htmlFor="f-img">Image URL (optional)</label>
+                      <input id="f-img" type="url" value={form.image_url} onChange={(e) => setForm({ ...form, image_url: e.target.value })} placeholder="https://images.unsplash.com/photo-..." />
                     </div>
                     <div className="d-field">
                       <label htmlFor="f-excerpt">Excerpt (optional — shown in the list)</label>
