@@ -1,6 +1,30 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { ArrowLeft, Lock, Pencil, Trash2, Plus, LogOut, Image as ImageIcon } from 'lucide-react';
+import { ArrowLeft, Lock, Pencil, Trash2, Plus, LogOut, Search } from 'lucide-react';
 import { supabase } from './supabaseClient';
+
+const CATEGORY_PALETTE = [
+  '#1F4B99', // cobalt
+  '#3D6B4F', // forest
+  '#9C4B2E', // rust
+  '#7A5C1E', // ochre
+  '#5B4B8A', // plum
+  '#1F6F72', // teal
+  '#6B5344', // taupe
+  '#8A3B5C', // berry
+  '#45586B', // slate
+];
+
+function categoryColor(category) {
+  const str = category || 'General';
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) hash = (hash * 31 + str.charCodeAt(i)) >>> 0;
+  return CATEGORY_PALETTE[hash % CATEGORY_PALETTE.length];
+}
+
+function readingTime(content) {
+  const words = (content || '').trim().split(/\s+/).filter(Boolean).length;
+  return Math.max(1, Math.round(words / 200));
+}
 
 function formatDate(iso) {
   try {
@@ -22,6 +46,9 @@ export default function App() {
 
   const [view, setView] = useState('home');
   const [activeId, setActiveId] = useState(null);
+
+  const [searchQuery, setSearchQuery] = useState('');
+  const [categoryFilter, setCategoryFilter] = useState('All');
 
   const [session, setSession] = useState(null);
   const [authChecked, setAuthChecked] = useState(false);
@@ -82,6 +109,28 @@ export default function App() {
     [articles]
   );
   const active = useMemo(() => articles.find((a) => a.id === activeId) || null, [articles, activeId]);
+
+  const filtered = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    return sorted.filter((a) => {
+      const matchesCat = categoryFilter === 'All' || a.category === categoryFilter;
+      const matchesQuery =
+        !q || a.title.toLowerCase().includes(q) || (a.excerpt || '').toLowerCase().includes(q);
+      return matchesCat && matchesQuery;
+    });
+  }, [sorted, categoryFilter, searchQuery]);
+
+  const showHero = categoryFilter === 'All' && !searchQuery.trim() && filtered.length > 0;
+  const heroArticle = showHero ? filtered[0] : null;
+  const gridArticles = showHero ? filtered.slice(1) : filtered;
+
+  const related = useMemo(() => {
+    if (!active) return [];
+    return articles
+      .filter((a) => a.id !== active.id && a.category === active.category)
+      .sort((a, b) => new Date(b.date) - new Date(a.date))
+      .slice(0, 3);
+  }, [articles, active]);
 
   function openArticle(id) {
     setActiveId(id);
@@ -217,7 +266,7 @@ export default function App() {
         }
         .dispatch-root * { box-sizing: border-box; }
         .dispatch-root :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-        .d-shell { max-width: 760px; margin: 0 auto; padding: 0 24px; }
+        .d-shell { max-width: 920px; margin: 0 auto; padding: 0 24px; }
         .d-header { padding: 40px 0 20px; }
         .d-header-row { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
         .d-mast {
@@ -225,38 +274,96 @@ export default function App() {
           font-family: 'Fraunces', Georgia, serif; font-weight: 600;
           font-size: clamp(28px, 4vw, 36px); letter-spacing: -0.01em; color: var(--ink);
         }
+        .d-tagline { font-size: 14px; color: var(--ink-soft); margin: 4px 0 0; }
         .d-dateline { font-size: 13px; color: var(--ink-faint); }
         .d-rule { border: none; border-top: 1px solid var(--line); margin: 20px 0 0; }
-        .d-main { padding: 36px 0 80px; }
-        .d-hero-cat { color: var(--accent); font-size: 13px; font-weight: 600; margin-bottom: 10px; }
+        .d-main { padding: 32px 0 80px; }
+
+        .d-filterbar {
+          display: flex; align-items: center; gap: 18px; flex-wrap: wrap;
+          margin-bottom: 40px; padding-bottom: 20px; border-bottom: 1px solid var(--line);
+        }
+        .d-search {
+          display: flex; align-items: center; gap: 8px;
+          border: 1px solid var(--line); border-radius: 20px; padding: 7px 14px;
+          background: #fff; flex-shrink: 0;
+        }
+        .d-search input {
+          border: none; outline: none; font-size: 14px; font-family: inherit;
+          background: none; width: 160px; color: var(--ink);
+        }
+        .d-search svg { color: var(--ink-faint); flex-shrink: 0; }
+        .d-pills { display: flex; gap: 6px; flex-wrap: wrap; }
+        .d-pill {
+          border: 1px solid var(--line); background: #fff; border-radius: 20px;
+          padding: 6px 14px; font-size: 13px; font-weight: 500; color: var(--ink-soft);
+          cursor: pointer; white-space: nowrap;
+        }
+        .d-pill:hover { border-color: var(--ink-faint); color: var(--ink); }
+        .d-pill.active { color: #fff; border-color: transparent; }
+
+        .d-hero-img {
+          width: 100%; aspect-ratio: 16 / 8; object-fit: cover;
+          border-radius: 6px; margin-bottom: 22px; background: var(--surface);
+        }
+        .d-hero-cat { font-size: 13px; font-weight: 600; margin-bottom: 10px; }
         .d-hero-title { font-size: clamp(30px, 5vw, 44px); line-height: 1.12; font-weight: 600; margin: 0 0 14px; cursor: pointer; font-family: 'Fraunces', Georgia, serif; }
         .d-hero-title:hover { color: var(--accent); }
         .d-hero-excerpt { font-size: 18px; color: var(--ink-soft); max-width: 62ch; margin: 0 0 10px; }
-        .d-hero-date { font-size: 13px; color: var(--ink-faint); }
-        .d-img-cover { width: 100%; max-height: 380px; object-fit: cover; border-radius: 6px; margin: 16px 0 24px; border: 1px solid var(--line); }
-        .d-img-thumb { width: 120px; height: 80px; object-fit: cover; border-radius: 4px; border: 1px solid var(--line); flex-shrink: 0; }
+        .d-hero-meta { font-size: 13px; color: var(--ink-faint); }
         @keyframes fadeUp { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
         @media (prefers-reduced-motion: no-preference) { .d-hero { animation: fadeUp 0.55s ease both; } }
-        .d-list { margin-top: 44px; }
-        .d-row { padding: 26px 0; border-top: 1px solid var(--line); cursor: pointer; display: flex; gap: 20px; align-items: flex-start; justify-content: space-between; }
-        .d-row:last-child { border-bottom: 1px solid var(--line); }
-        .d-row-content { flex: 1; }
-        .d-row-cat { color: var(--accent); font-size: 13px; font-weight: 600; margin-bottom: 6px; }
-        .d-row-title { font-size: 22px; font-weight: 600; margin: 0 0 8px; line-height: 1.3; font-family: 'Fraunces', Georgia, serif; }
-        .d-row:hover .d-row-title { color: var(--accent); }
-        .d-row-excerpt { color: var(--ink-soft); font-size: 15px; max-width: 62ch; margin: 0 0 8px; }
-        .d-row-date { font-size: 12.5px; color: var(--ink-faint); }
+
+        .d-grid {
+          margin-top: 44px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 34px 28px;
+        }
+        .d-card { cursor: pointer; }
+        .d-card-img {
+          width: 100%; aspect-ratio: 3 / 2; object-fit: cover; border-radius: 5px;
+          margin-bottom: 14px; background: var(--surface); display: block;
+        }
+        .d-card-noimg {
+          width: 100%; aspect-ratio: 3 / 2; border-radius: 5px; margin-bottom: 14px;
+          display: flex; align-items: center; justify-content: center;
+        }
+        .d-card-noimg span { font-family: 'Fraunces', Georgia, serif; font-size: 42px; font-weight: 600; }
+        .d-card-cat { font-size: 12.5px; font-weight: 600; margin-bottom: 6px; }
+        .d-card-title { font-size: 20px; font-weight: 600; margin: 0 0 8px; line-height: 1.3; font-family: 'Fraunces', Georgia, serif; }
+        .d-card:hover .d-card-title { color: var(--accent); }
+        .d-card-excerpt {
+          color: var(--ink-soft); font-size: 14.5px; margin: 0 0 8px;
+          display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+        }
+        .d-card-meta { font-size: 12px; color: var(--ink-faint); }
+
         .d-empty { padding: 60px 0; text-align: center; color: var(--ink-soft); }
         .d-back { display: inline-flex; align-items: center; gap: 6px; background: none; border: none; color: var(--ink-soft); font-size: 14px; padding: 0; cursor: pointer; margin-bottom: 28px; }
         .d-back:hover { color: var(--accent); }
-        .d-article-cat { color: var(--accent); font-size: 13px; font-weight: 600; margin-bottom: 12px; }
-        .d-article-title { font-size: clamp(30px, 5vw, 42px); line-height: 1.15; font-weight: 600; margin: 0 0 14px; max-width: 20ch; font-family: 'Fraunces', Georgia, serif; }
-        .d-article-date { color: var(--ink-faint); font-size: 13px; margin-bottom: 24px; }
+
+        .d-article { max-width: 700px; }
+        .d-article-img { width: 100%; aspect-ratio: 16 / 9; object-fit: cover; border-radius: 6px; margin-bottom: 28px; background: var(--surface); }
+        .d-article-cat { font-size: 13px; font-weight: 600; margin-bottom: 12px; }
+        .d-article-title { font-size: clamp(30px, 5vw, 42px); line-height: 1.15; font-weight: 600; margin: 0 0 14px; font-family: 'Fraunces', Georgia, serif; }
+        .d-article-meta { color: var(--ink-faint); font-size: 13px; margin-bottom: 36px; }
         .d-article-body p { font-size: 18px; line-height: 1.75; color: #26272c; max-width: 66ch; margin: 0 0 22px; }
-        .d-footer { border-top: 1px solid var(--line); padding: 22px 0 50px; }
+        .d-article-body p:first-of-type::first-letter {
+          font-family: 'Fraunces', Georgia, serif; font-weight: 600; font-size: 60px;
+          line-height: 0.75; float: left; padding: 4px 8px 0 0; color: var(--accent);
+        }
+
+        .d-related { margin-top: 56px; padding-top: 32px; border-top: 1px solid var(--line); max-width: 700px; }
+        .d-related h3 { font-size: 14px; font-weight: 600; color: var(--ink-soft); margin: 0 0 20px; text-transform: none; }
+        .d-related-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 20px; }
+        .d-related-item { cursor: pointer; }
+        .d-related-img { width: 100%; aspect-ratio: 4 / 3; object-fit: cover; border-radius: 5px; margin-bottom: 8px; background: var(--surface); }
+        .d-related-title { font-size: 14px; font-weight: 600; line-height: 1.35; margin: 0; font-family: 'Fraunces', Georgia, serif; }
+        .d-related-item:hover .d-related-title { color: var(--accent); }
+
+        .d-footer { border-top: 1px solid var(--line); padding: 22px 0 50px; margin-top: 20px; }
         .d-footer-row { display: flex; justify-content: space-between; align-items: center; font-size: 13px; color: var(--ink-faint); }
         .d-link-btn { background: none; border: none; color: var(--ink-faint); font-size: 13px; cursor: pointer; padding: 0; text-decoration: underline; text-underline-offset: 3px; }
         .d-link-btn:hover { color: var(--accent); }
+
         .d-banner { background: #fdf1ee; border: 1px solid #f0cfc6; color: var(--danger); font-size: 14px; padding: 12px 16px; border-radius: 4px; margin-bottom: 24px; }
         .d-login { max-width: 340px; margin: 60px auto; text-align: center; }
         .d-login-icon { width: 36px; height: 36px; margin: 0 auto 18px; color: var(--ink-faint); }
@@ -294,21 +401,27 @@ export default function App() {
         .d-panel { background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 28px; margin-top: 20px; }
         .d-panel h3 { margin: 0 0 20px; font-size: 18px; }
         .d-form-actions { display: flex; gap: 10px; margin-top: 4px; }
+        @media (max-width: 640px) {
+          .d-grid { grid-template-columns: 1fr; }
+          .d-related-grid { grid-template-columns: 1fr; }
+        }
         @media (max-width: 560px) {
           .d-shell { padding: 0 18px; }
           .d-header { padding: 28px 0 16px; }
           .d-panel { padding: 20px; }
           .d-admin-row { flex-direction: column; align-items: flex-start; }
           .d-admin-row-actions { align-self: flex-end; }
-          .d-row { flex-direction: column-reverse; }
-          .d-img-thumb { width: 100%; height: 160px; }
+          .d-search input { width: 110px; }
         }
       `}</style>
 
       <div className="d-shell">
         <header className="d-header">
           <div className="d-header-row">
-            <button className="d-mast" onClick={goHome}>Dispatch</button>
+            <div>
+              <button className="d-mast" onClick={goHome}>Dispatch</button>
+              <p className="d-tagline">Notes on living, working, and everything between.</p>
+            </div>
             <span className="d-dateline">
               {new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
             </span>
@@ -323,33 +436,73 @@ export default function App() {
 
           {!loading && !loadError && view === 'home' && (
             <>
-              {sorted.length === 0 && (
-                <div className="d-empty">Nothing published yet. Head to Admin, in the footer, to write the first post.</div>
-              )}
-              {sorted.length > 0 && (
-                <div className="d-hero">
-                  <div className="d-hero-cat">{sorted[0].category}</div>
-                  <h1 className="d-hero-title" onClick={() => openArticle(sorted[0].id)}>{sorted[0].title}</h1>
-                  {sorted[0].image_url && (
-                    <img src={sorted[0].image_url} alt={sorted[0].title} className="d-img-cover" onClick={() => openArticle(sorted[0].id)} style={{ cursor: 'pointer' }} />
-                  )}
-                  <p className="d-hero-excerpt">{sorted[0].excerpt}</p>
-                  <div className="d-hero-date">{formatDate(sorted[0].date)}</div>
+              {articles.length > 0 && (
+                <div className="d-filterbar">
+                  <div className="d-search">
+                    <Search size={15} />
+                    <input
+                      placeholder="Search"
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                    />
+                  </div>
+                  <div className="d-pills">
+                    <button
+                      className={`d-pill${categoryFilter === 'All' ? ' active' : ''}`}
+                      style={categoryFilter === 'All' ? { background: 'var(--ink)' } : undefined}
+                      onClick={() => setCategoryFilter('All')}
+                    >
+                      All
+                    </button>
+                    {categories.map((c) => (
+                      <button
+                        key={c}
+                        className={`d-pill${categoryFilter === c ? ' active' : ''}`}
+                        style={categoryFilter === c ? { background: categoryColor(c) } : undefined}
+                        onClick={() => setCategoryFilter(c)}
+                      >
+                        {c}
+                      </button>
+                    ))}
+                  </div>
                 </div>
               )}
-              {sorted.length > 1 && (
-                <div className="d-list">
-                  {sorted.slice(1).map((a) => (
-                    <article key={a.id} className="d-row" onClick={() => openArticle(a.id)}>
-                      <div className="d-row-content">
-                        <div className="d-row-cat">{a.category}</div>
-                        <h2 className="d-row-title">{a.title}</h2>
-                        <p className="d-row-excerpt">{a.excerpt}</p>
-                        <div className="d-row-date">{formatDate(a.date)}</div>
-                      </div>
-                      {a.image_url && (
-                        <img src={a.image_url} alt={a.title} className="d-img-thumb" />
+
+              {filtered.length === 0 && (
+                <div className="d-empty">
+                  {articles.length === 0
+                    ? 'Nothing published yet. Head to Admin, in the footer, to write the first post.'
+                    : 'No articles match that search.'}
+                </div>
+              )}
+
+              {heroArticle && (
+                <div className="d-hero">
+                  {heroArticle.image_url && (
+                    <img className="d-hero-img" src={heroArticle.image_url} alt="" onClick={() => openArticle(heroArticle.id)} />
+                  )}
+                  <div className="d-hero-cat" style={{ color: categoryColor(heroArticle.category) }}>{heroArticle.category}</div>
+                  <h1 className="d-hero-title" onClick={() => openArticle(heroArticle.id)}>{heroArticle.title}</h1>
+                  <p className="d-hero-excerpt">{heroArticle.excerpt}</p>
+                  <div className="d-hero-meta">{formatDate(heroArticle.date)} · {readingTime(heroArticle.content)} min read</div>
+                </div>
+              )}
+
+              {gridArticles.length > 0 && (
+                <div className="d-grid">
+                  {gridArticles.map((a) => (
+                    <article key={a.id} className="d-card" onClick={() => openArticle(a.id)}>
+                      {a.image_url ? (
+                        <img className="d-card-img" src={a.image_url} alt="" />
+                      ) : (
+                        <div className="d-card-noimg" style={{ background: `${categoryColor(a.category)}1a` }}>
+                          <span style={{ color: categoryColor(a.category) }}>{a.title.charAt(0).toUpperCase()}</span>
+                        </div>
                       )}
+                      <div className="d-card-cat" style={{ color: categoryColor(a.category) }}>{a.category}</div>
+                      <h2 className="d-card-title">{a.title}</h2>
+                      <p className="d-card-excerpt">{a.excerpt}</p>
+                      <div className="d-card-meta">{formatDate(a.date)} · {readingTime(a.content)} min read</div>
                     </article>
                   ))}
                 </div>
@@ -358,17 +511,35 @@ export default function App() {
           )}
 
           {!loading && !loadError && view === 'article' && active && (
-            <div>
+            <div className="d-article">
               <button className="d-back" onClick={goHome}><ArrowLeft size={15} /> All articles</button>
-              <div className="d-article-cat">{active.category}</div>
+              {active.image_url && <img className="d-article-img" src={active.image_url} alt="" />}
+              <div className="d-article-cat" style={{ color: categoryColor(active.category) }}>{active.category}</div>
               <h1 className="d-article-title">{active.title}</h1>
-              <div className="d-article-date">{formatDate(active.date)}</div>
-              {active.image_url && (
-                <img src={active.image_url} alt={active.title} className="d-img-cover" />
-              )}
+              <div className="d-article-meta">{formatDate(active.date)} · {readingTime(active.content)} min read</div>
               <div className="d-article-body">
                 {active.content.split('\n').filter(Boolean).map((p, i) => <p key={i}>{p}</p>)}
               </div>
+
+              {related.length > 0 && (
+                <div className="d-related">
+                  <h3>More in {active.category}</h3>
+                  <div className="d-related-grid">
+                    {related.map((r) => (
+                      <div key={r.id} className="d-related-item" onClick={() => openArticle(r.id)}>
+                        {r.image_url ? (
+                          <img className="d-related-img" src={r.image_url} alt="" />
+                        ) : (
+                          <div className="d-related-img" style={{ background: `${categoryColor(r.category)}1a`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                            <span style={{ fontFamily: "'Fraunces', Georgia, serif", fontSize: 24, fontWeight: 600, color: categoryColor(r.category) }}>{r.title.charAt(0).toUpperCase()}</span>
+                          </div>
+                        )}
+                        <p className="d-related-title">{r.title}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
@@ -427,7 +598,7 @@ export default function App() {
                     </div>
                     <div className="d-field">
                       <label htmlFor="f-img">Image URL (optional)</label>
-                      <input id="f-img" type="url" value={form.image_url} onChange={(e) => setForm({ ...form, image_url: e.target.value })} placeholder="https://images.unsplash.com/photo-..." />
+                      <input id="f-img" value={form.image_url} onChange={(e) => setForm({ ...form, image_url: e.target.value })} placeholder="https://..." />
                     </div>
                     <div className="d-field">
                       <label htmlFor="f-excerpt">Excerpt (optional — shown in the list)</label>
