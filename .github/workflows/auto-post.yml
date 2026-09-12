@@ -1,0 +1,23 @@
+name: Auto-publish post
+
+on:
+  schedule:
+    # Runs at minute 0 every 8 hours (3 times a day). Edit the cron
+    # expression below to change how often it runs.
+    - cron: '0 */8 * * *'
+  workflow_dispatch: {}
+
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm install @supabase/supabase-js
+      - run: node scripts/generate-post.mjs
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}

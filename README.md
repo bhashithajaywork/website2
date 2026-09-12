@@ -20,6 +20,7 @@ create table articles (
   category text not null default 'General',
   excerpt text,
   content text not null,
+  image_url text,
   date date not null default current_date,
   created_at timestamptz not null default now()
 );
@@ -49,6 +50,12 @@ create policy "Signed-in users can delete articles"
 
 This lets anyone read articles (so the public site works), but only a signed-in
 user can add, edit, or delete them (so Admin is actually protected).
+
+> **Already created your table before?** Just add the new column instead of
+> running the block above again:
+> ```sql
+> alter table articles add column image_url text;
+> ```
 
 ### Optional: seed a few starter posts
 
