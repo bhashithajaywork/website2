@@ -84,3 +84,52 @@ well under a minute), check your live site — a new post should appear.
 
 Auto-posts show up in Admin like any other post, so you can still edit or
 delete anything it writes.
+
+## Optional: auto-post to a Facebook Page (via Zapier — no developer setup)
+
+Every time a post is published, it can also be shared to a Facebook Page,
+with a real link straight to that article — no Facebook Developer account,
+no App Review, no token juggling. This uses two things: a live RSS feed
+this project already includes at `/api/rss`, and Zapier's free plan to
+watch that feed and post new items to Facebook.
+
+### 1. Make sure the RSS feed is live
+
+Once you've deployed the latest code, visit:
+```
+https://your-domain.com/api/rss
+```
+You should see XML listing your posts. If you see an error about missing
+Supabase environment variables, add `VITE_SUPABASE_URL` and
+`VITE_SUPABASE_ANON_KEY` in your Vercel project's **Settings →
+Environment Variables** (the same values from your original site setup).
+
+### 2. Create a free Zapier account
+
+Go to https://zapier.com and sign up — no credit card needed.
+
+### 3. Build the Zap
+
+1. **Create Zap → Trigger**: search for and choose **RSS by Zapier**, event
+   **New Item in Feed**.
+2. Paste your feed URL from step 1, then test the trigger — it should pull
+   in your most recent post.
+3. **Action**: search for and choose **Facebook Pages**, event **Create
+   Page Post**.
+4. Click **Sign in to Facebook Pages** and connect your account — Zapier
+   handles the login and permissions, no app creation needed. Choose your
+   Page.
+5. Map the fields: **Message** → combine the RSS item's Title and
+   Description fields, **Link** → the RSS item's Link field.
+6. Turn the Zap **on**.
+
+That's it — Zapier checks the feed roughly every 15 minutes on the free
+plan and posts anything new to your Page, using this one Zap (well inside
+the free plan's 100-tasks-a-month allowance for 3 posts a day).
+
+### Notes
+
+- The free plan checks the feed every ~15 minutes, not instantly — a post
+  may take up to that long to appear on Facebook.
+- If you ever want it faster or need more automations, Zapier's paid tier
+  adds shorter polling and multi-step Zaps — not necessary for this.

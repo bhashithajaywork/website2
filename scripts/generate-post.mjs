@@ -14,7 +14,17 @@ if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY || !GEMINI_API_KEY) {
 const MODEL = 'gemini-flash-latest';
 
 // Edit this list to change what the site writes about.
-const CATEGORIES = ['Living', 'Work', 'Culture'];
+const CATEGORIES = [
+  'Living',
+  'Work',
+  'Culture',
+  'Technology',
+  'Health & Wellness',
+  'Travel',
+  'Food',
+  'Finance',
+  'Sports',
+];
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
@@ -47,20 +57,22 @@ async function generatePost(category, recentTitles) {
         .join('\n')}\n\n`
     : '';
 
-  const prompt = `You write short, thoughtful blog posts for a small independent publication called "Dispatch". The tone is calm, specific, and personal, like a smart friend thinking out loud. Not a listicle, not a press release, no clickbait.
+  const prompt = `You write short, thoughtful blog posts for a small independent Sri Lankan publication called "Dispatch". Write the title, excerpt, and content entirely in Sinhala (සිංහල script) — natural, everyday Sinhala, not overly formal or literary. The tone is calm, specific, and personal, like a smart friend thinking out loud. Not a listicle, not a press release, no clickbait.
 
 Write one new post in the "${category}" category.
 
+If the category is Finance or Health & Wellness, keep it reflective and general — personal observations and everyday context, not specific investment advice, medical advice, or dosage recommendations.
+
 ${avoidList}Return ONLY a JSON object, with no other text and no markdown code fences, in exactly this shape:
 {
-  "title": "a specific, understated title",
-  "excerpt": "one or two sentences, under 30 words",
-  "content": "3 to 4 short paragraphs separated by a blank line, no headers, no bullet points",
-  "image_prompt": "a short, concrete visual description (10-20 words) for an editorial photo or illustration to go with this post — describe a real scene, no text or words in the image, no logos"
+  "title": "a specific, understated title, in Sinhala",
+  "excerpt": "one or two sentences in Sinhala, under 30 words",
+  "content": "3 to 4 short paragraphs in Sinhala, separated by a blank line, no headers, no bullet points",
+  "image_prompt": "a short, concrete visual description (10-20 words, in English) for an editorial photo or illustration to go with this post — describe a real scene, no text or words in the image, no logos"
 }`;
 
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent`;
-  const response = await fetch(url, {
+  const options = {
     method: 'POST',
     headers: {
       'content-type': 'application/json',
@@ -69,20 +81,28 @@ ${avoidList}Return ONLY a JSON object, with no other text and no markdown code f
     body: JSON.stringify({
       contents: [{ parts: [{ text: prompt }] }],
     }),
-  });
+  };
 
-  if (!response.ok) {
-    const text = await response.text();
-    throw new Error(`Gemini API error ${response.status}: ${text}`);
+  const delays = [5000, 15000, 30000];
+  let lastError;
+  for (let attempt = 0; attempt <= delays.length; attempt++) {
+    const response = await fetch(url, options);
+    if (response.ok) {
+      const data = await response.json();
+      const parts = data.candidates?.[0]?.content?.parts || [];
+      const text = parts.map((p) => p.text || '').join('');
+      if (!text) throw new Error('No text in the Gemini response.');
+      const cleaned = text.replace(/```json|```/g, '').trim();
+      return JSON.parse(cleaned);
+    }
+    const bodyText = await response.text();
+    lastError = new Error(`Gemini API error ${response.status}: ${bodyText}`);
+    const retryable = response.status === 503 || response.status === 429;
+    if (!retryable || attempt === delays.length) throw lastError;
+    console.warn(`Gemini API busy (${response.status}), retrying in ${delays[attempt] / 1000}s…`);
+    await new Promise((r) => setTimeout(r, delays[attempt]));
   }
-
-  const data = await response.json();
-  const parts = data.candidates?.[0]?.content?.parts || [];
-  const text = parts.map((p) => p.text || '').join('');
-  if (!text) throw new Error('No text in the Gemini response.');
-
-  const cleaned = text.replace(/```json|```/g, '').trim();
-  return JSON.parse(cleaned);
+  throw lastError;
 }
 
 async function main() {

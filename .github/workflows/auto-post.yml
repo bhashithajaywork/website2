@@ -10,12 +10,13 @@ on:
 jobs:
   generate:
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
-      - run: npm install @supabase/supabase-js
+          node-version: 22
+      - run: npm install @supabase/supabase-js --no-audit --no-fund --loglevel=error
       - run: node scripts/generate-post.mjs
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}

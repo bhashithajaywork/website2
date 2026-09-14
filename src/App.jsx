@@ -132,15 +132,30 @@ export default function App() {
       .slice(0, 3);
   }, [articles, active]);
 
+  useEffect(() => {
+    function applyHash() {
+      const m = window.location.hash.match(/^#post-(.+)$/);
+      if (m) {
+        setActiveId(m[1]);
+        setView('article');
+      }
+    }
+    applyHash();
+    window.addEventListener('hashchange', applyHash);
+    return () => window.removeEventListener('hashchange', applyHash);
+  }, []);
+
   function openArticle(id) {
     setActiveId(id);
     setView('article');
+    window.history.pushState(null, '', `#post-${id}`);
     window.scrollTo(0, 0);
   }
   function goHome() {
     setView('home');
     setActiveId(null);
     setEditingId(null);
+    window.history.pushState(null, '', window.location.pathname + window.location.search);
   }
   function openAdmin() {
     setView('admin');
