@@ -1,6 +1,13 @@
 import { createClient } from '@supabase/supabase-js';
 
-const { SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, GEMINI_API_KEY } = process.env;
+const {
+  SUPABASE_URL,
+  SUPABASE_SERVICE_ROLE_KEY,
+  GEMINI_API_KEY,
+  SITE_URL,
+  FB_PAGE_ID,
+  FB_PAGE_ACCESS_TOKEN,
+} = process.env;
 
 if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY || !GEMINI_API_KEY) {
   console.error('Missing one of SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, GEMINI_API_KEY.');
@@ -35,6 +42,28 @@ function buildImageUrl(imagePrompt) {
   const seed = Math.floor(Math.random() * 1_000_000);
   const encoded = encodeURIComponent(imagePrompt);
   return `https://image.pollinations.ai/prompt/${encoded}?width=1200&height=630&seed=${seed}&nologo=true`;
+}
+
+// Posting to Facebook is optional — if the secrets aren't set, this is
+// skipped quietly. If it fails for any reason, we log a warning but never
+// throw, so a Facebook hiccup can never stop the blog post itself from
+// being published.
+async function postToFacebook(post, link) {
+  if (!FB_PAGE_ID || !FB_PAGE_ACCESS_TOKEN) return;
+  try {
+    const message = `${post.title}\n\n${post.excerpt}`;
+    const url = `https://graph.facebook.com/v21.0/${FB_PAGE_ID}/feed`;
+    const body = new URLSearchParams({ message, link, access_token: FB_PAGE_ACCESS_TOKEN });
+    const response = await fetch(url, { method: 'POST', body });
+    if (!response.ok) {
+      const text = await response.text();
+      console.warn('Facebook post failed:', text);
+    } else {
+      console.log('Posted to Facebook.');
+    }
+  } catch (e) {
+    console.warn('Facebook post failed:', e.message);
+  }
 }
 
 async function getRecentTitles() {
@@ -83,7 +112,7 @@ ${avoidList}Return ONLY a JSON object, with no other text and no markdown code f
     }),
   };
 
-  const delays = [5000, 15000, 30000];
+  const delays = [5000, 15000, 30000, 60000, 60000];
   let lastError;
   for (let attempt = 0; attempt <= delays.length; attempt++) {
     const response = await fetch(url, options);
@@ -110,19 +139,28 @@ async function main() {
   const recentTitles = await getRecentTitles();
   const post = await generatePost(category, recentTitles);
 
-  const { error } = await supabase.from('articles').insert([
-    {
-      title: post.title,
-      category,
-      excerpt: post.excerpt,
-      content: post.content,
-      image_url: post.image_prompt ? buildImageUrl(post.image_prompt) : null,
-      date: new Date().toISOString().slice(0, 10),
-    },
-  ]);
+  const { data: inserted, error } = await supabase
+    .from('articles')
+    .insert([
+      {
+        title: post.title,
+        category,
+        excerpt: post.excerpt,
+        content: post.content,
+        image_url: post.image_prompt ? buildImageUrl(post.image_prompt) : null,
+        date: new Date().toISOString().slice(0, 10),
+      },
+    ])
+    .select()
+    .single();
 
   if (error) throw error;
   console.log(`Published: "${post.title}" (${category})`);
+
+  if (SITE_URL) {
+    const link = `${SITE_URL.replace(/\/$/, '')}/#post-${inserted.id}`;
+    await postToFacebook(post, link);
+  }
 }
 
 main().catch((err) => {

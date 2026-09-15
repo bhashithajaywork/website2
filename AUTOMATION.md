@@ -85,51 +85,71 @@ well under a minute), check your live site — a new post should appear.
 Auto-posts show up in Admin like any other post, so you can still edit or
 delete anything it writes.
 
-## Optional: auto-post to a Facebook Page (via Zapier — no developer setup)
+## Optional: auto-post to a Facebook Page
 
-Every time a post is published, it can also be shared to a Facebook Page,
-with a real link straight to that article — no Facebook Developer account,
-no App Review, no token juggling. This uses two things: a live RSS feed
-this project already includes at `/api/rss`, and Zapier's free plan to
-watch that feed and post new items to Facebook.
+Every time a post is published, it can also be shared to a Facebook Page
+with a real link straight to that article. This part is optional — if you
+skip it, everything else keeps working exactly the same.
 
-### 1. Make sure the RSS feed is live
+This posts directly through Facebook's own API — no third-party service, no
+subscription, nothing that can start charging you later. It needs a bit
+more setup than the rest, because Facebook requires you to register a
+"developer app" even for posting to your own Page, but none of this costs
+anything and it's a one-time setup.
 
-Once you've deployed the latest code, visit:
-```
-https://your-domain.com/api/rss
-```
-You should see XML listing your posts. If you see an error about missing
-Supabase environment variables, add `VITE_SUPABASE_URL` and
-`VITE_SUPABASE_ANON_KEY` in your Vercel project's **Settings →
-Environment Variables** (the same values from your original site setup).
+### 1. Create a Facebook App
 
-### 2. Create a free Zapier account
+1. Go to https://developers.facebook.com and log in with the Facebook
+   account that manages your Page.
+2. **My Apps → Create App**. Choose the type closest to "Other" or
+   "Business", give it any name.
+3. You don't need to submit this app for review — it only needs to work for
+   you, the app's own admin, which Facebook allows without review.
 
-Go to https://zapier.com and sign up — no credit card needed.
+### 2. Get a Page Access Token that never expires
 
-### 3. Build the Zap
+1. In the Facebook Developer site, open **Tools → Graph API Explorer**.
+2. Select your app from the dropdown near the top.
+3. Click **Generate Access Token**, and when prompted, add these
+   permissions: `pages_show_list`, `pages_read_engagement`,
+   `pages_manage_posts`, `public_profile`. Approve access to your Page.
+4. Copy the token it gives you (this one is short-lived — good for about an
+   hour).
+5. Go to https://developers.facebook.com/tools/debug/accesstoken/, paste
+   that token, click **Debug**, then click **Extend Access Token**. Copy
+   the new, longer-lived token (good for about 60 days).
+6. In your browser's address bar, visit this URL, replacing the two
+   placeholders (find your Page's numeric ID under your Page's **About**
+   section, or via **Settings → Page transparency**):
+   ```
+   https://graph.facebook.com/v21.0/YOUR_PAGE_ID?fields=access_token&access_token=YOUR_60_DAY_TOKEN
+   ```
+7. The `access_token` in the response is a **Page Access Token that does
+   not expire**. This is the one you'll use — save it somewhere safe.
 
-1. **Create Zap → Trigger**: search for and choose **RSS by Zapier**, event
-   **New Item in Feed**.
-2. Paste your feed URL from step 1, then test the trigger — it should pull
-   in your most recent post.
-3. **Action**: search for and choose **Facebook Pages**, event **Create
-   Page Post**.
-4. Click **Sign in to Facebook Pages** and connect your account — Zapier
-   handles the login and permissions, no app creation needed. Choose your
-   Page.
-5. Map the fields: **Message** → combine the RSS item's Title and
-   Description fields, **Link** → the RSS item's Link field.
-6. Turn the Zap **on**.
+### 3. Add secrets to GitHub
 
-That's it — Zapier checks the feed roughly every 15 minutes on the free
-plan and posts anything new to your Page, using this one Zap (well inside
-the free plan's 100-tasks-a-month allowance for 3 posts a day).
+Add three more repository secrets (**Settings → Secrets and variables →
+Actions**):
 
-### Notes
+- `SITE_URL` — your live site's URL, e.g. `https://your-domain.com`
+  (no trailing slash needed)
+- `FB_PAGE_ID` — your Page's numeric ID
+- `FB_PAGE_ACCESS_TOKEN` — the never-expiring token from step 2.7
 
-- The free plan checks the feed every ~15 minutes, not instantly — a post
-  may take up to that long to appear on Facebook.
-- If you ever want it faster or need more automations, Zapier's paid tier
-  adds shorter polling and multi-step Zaps — not necessary for this.
+### 4. Push and test
+
+Push the updated files, then run the workflow by hand from the **Actions**
+tab. Check your Facebook Page — a new post should appear with a link that
+opens the exact article on your site.
+
+If a Facebook post ever fails, it won't stop the blog post itself from
+being published — check the workflow's log for a warning starting with
+"Facebook post failed" to see why.
+
+### A note on the `/api/rss` feed
+
+This project also ships a live RSS feed at `/api/rss`. It isn't required
+for the Facebook posting above, but it's there if you ever want it — for
+letting people subscribe with an RSS reader, or for connecting to some
+other automation tool later.
