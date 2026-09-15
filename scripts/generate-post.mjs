@@ -18,7 +18,7 @@ if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY || !GEMINI_API_KEY) {
 // new versions, so this shouldn't need edits. If it ever errors out, check
 // https://ai.google.dev/gemini-api/docs/models for the current free-tier
 // model name and put it here instead.
-const MODEL = 'gemini-flash-latest';
+const MODEL = 'gemini-flash-lite-latest';
 
 // Edit this list to change what the site writes about.
 const CATEGORIES = [
@@ -141,7 +141,7 @@ ${avoidList}Return ONLY a JSON object, with no other text and no markdown code f
     }
     const bodyText = await response.text();
     lastError = new Error(`Gemini API error ${response.status}: ${bodyText}`);
-    const retryable = response.status === 503 || response.status === 429;
+    const retryable = response.status === 503;
     if (!retryable || attempt === delays.length) throw lastError;
     console.warn(`Gemini API busy (${response.status}), retrying in ${delays[attempt] / 1000}s…`);
     await new Promise((r) => setTimeout(r, delays[attempt]));
