@@ -41,25 +41,40 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 function buildImageUrl(imagePrompt) {
   const seed = Math.floor(Math.random() * 1_000_000);
   const encoded = encodeURIComponent(imagePrompt);
-  return `https://image.pollinations.ai/prompt/${encoded}?width=1200&height=630&seed=${seed}&nologo=true`;
+  return `https://image.pollinations.ai/prompt/${encoded}?model=flux&enhance=true&width=1200&height=630&seed=${seed}&nologo=true`;
 }
 
 // Posting to Facebook is optional — if the secrets aren't set, this is
 // skipped quietly. If it fails for any reason, we log a warning but never
 // throw, so a Facebook hiccup can never stop the blog post itself from
 // being published.
-async function postToFacebook(post, link) {
+async function postToFacebook(post, link, imageUrl) {
   if (!FB_PAGE_ID || !FB_PAGE_ACCESS_TOKEN) return;
+  const caption = `${post.title}\n\n${post.excerpt}\n\n${link}`;
   try {
-    const message = `${post.title}\n\n${post.excerpt}`;
-    const url = `https://graph.facebook.com/v21.0/${FB_PAGE_ID}/feed`;
-    const body = new URLSearchParams({ message, link, access_token: FB_PAGE_ACCESS_TOKEN });
-    const response = await fetch(url, { method: 'POST', body });
-    if (!response.ok) {
-      const text = await response.text();
-      console.warn('Facebook post failed:', text);
+    if (imageUrl) {
+      // Attach the actual cover image to the post, not just a link.
+      const url = `https://graph.facebook.com/v21.0/${FB_PAGE_ID}/photos`;
+      const body = new URLSearchParams({ url: imageUrl, caption, access_token: FB_PAGE_ACCESS_TOKEN });
+      const response = await fetch(url, { method: 'POST', body });
+      if (!response.ok) {
+        console.warn('Facebook photo post failed:', await response.text());
+      } else {
+        console.log('Posted to Facebook (with image).');
+      }
     } else {
-      console.log('Posted to Facebook.');
+      const url = `https://graph.facebook.com/v21.0/${FB_PAGE_ID}/feed`;
+      const body = new URLSearchParams({
+        message: `${post.title}\n\n${post.excerpt}`,
+        link,
+        access_token: FB_PAGE_ACCESS_TOKEN,
+      });
+      const response = await fetch(url, { method: 'POST', body });
+      if (!response.ok) {
+        console.warn('Facebook post failed:', await response.text());
+      } else {
+        console.log('Posted to Facebook (link only, no image).');
+      }
     }
   } catch (e) {
     console.warn('Facebook post failed:', e.message);
@@ -138,6 +153,7 @@ async function main() {
   const category = CATEGORIES[Math.floor(Math.random() * CATEGORIES.length)];
   const recentTitles = await getRecentTitles();
   const post = await generatePost(category, recentTitles);
+  const imageUrl = post.image_prompt ? buildImageUrl(post.image_prompt) : null;
 
   const { data: inserted, error } = await supabase
     .from('articles')
@@ -147,7 +163,7 @@ async function main() {
         category,
         excerpt: post.excerpt,
         content: post.content,
-        image_url: post.image_prompt ? buildImageUrl(post.image_prompt) : null,
+        image_url: imageUrl,
         date: new Date().toISOString().slice(0, 10),
       },
     ])
@@ -159,7 +175,7 @@ async function main() {
 
   if (SITE_URL) {
     const link = `${SITE_URL.replace(/\/$/, '')}/#post-${inserted.id}`;
-    await postToFacebook(post, link);
+    await postToFacebook(post, link, imageUrl);
   }
 }
 
